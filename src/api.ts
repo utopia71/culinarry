@@ -1,5 +1,5 @@
-import type { NewRecipe, Recipe } from "./types.js";
-import { parseRecipes } from "./parse.js";
+import type { NewRecipe, Recipe, RecipeUpdate } from "./types.js";
+import { parseRecipe, parseRecipes } from "./parse.js";
 
 const API_URL = "http://localhost:3001/recipes";
 
@@ -36,7 +36,7 @@ export async function createRecipeApi(draft: NewRecipe): Promise<Recipe> {
 
 export async function updateRecipeApi(
   id: string,
-  updates: Partial<Recipe>,
+  updates: RecipeUpdate,
 ): Promise<Recipe> {
   return request(
     `${API_URL}/${encodeURIComponent(id)}`,
@@ -56,4 +56,23 @@ export async function deleteRecipeApi(id: string): Promise<void> {
   if (!response.ok) {
     throw new Error(`Сервер вернул ошибку: ${response.status}`);
   }
+}
+
+export type FetchRecipesResult =
+  Awaited<ReturnType<typeof fetchRecipes>>;
+
+export type FetchRecipesArguments =
+  Parameters<typeof fetchRecipes>;
+
+export async function updateRecipeOnServer(
+  id: Recipe["id"],
+  changes: RecipeUpdate,
+): Promise<Recipe> {
+  const data = await request(`${API_URL}/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(changes),
+  }, (response: unknown) => response);
+
+  return parseRecipe(data);
 }

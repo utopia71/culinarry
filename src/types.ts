@@ -1,4 +1,5 @@
-export type Category = "Завтрак" | "Обед" | "Ужин" | "Десерт";
+export const CATEGORIES = ["Завтрак", "Обед", "Ужин", "Десерт"] as const;
+export type Category = (typeof CATEGORIES)[number];
 export interface Review {
   readonly id: string;
   author: string;
@@ -27,3 +28,35 @@ export type RecipeFilter = {
   sortByCookingTime: "none" | "ascending" | "descending";
 };
 export type NewRecipe = Omit<Recipe, "id">;
+
+export type RecipeSortKey =
+  | "title"
+  | "servings"
+  | "cookingTime";
+
+export type RecipeSortValue =
+  Recipe["title"] | Recipe["servings"] | Recipe["cookingTime"];
+
+export type CategoryLabels = Record<Category, string>;
+
+export type RecipeUpdate = Partial<Omit<Recipe, "id">>;
+
+export type RequiredRecipeUpdate = Required<RecipeUpdate>;
+
+export type RecipeCardData =
+  Pick<Recipe, "id" | "title" | "category">;
+
+export type RecipeWithoutId =
+  Omit<Recipe, "id">;
+
+export type ReadonlyRecipe =
+  Readonly<Recipe>;
+
+export type CategoryCounts =
+  Record<Category, number>;
+
+export type EditableRecipeFields =
+  Exclude<keyof Recipe, "id">;
+
+export type MainRecipeFields =
+  Extract<keyof Recipe, "title" | "category">;

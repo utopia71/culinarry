@@ -1,4 +1,18 @@
-import type { Recipe, RecipeDraft, RecipeFilter, Review } from "./types.js";
+import type {
+  CategoryLabels,
+  Recipe,
+  RecipeDraft,
+  RecipeFilter,
+  RecipeSortKey,
+  Review,
+} from "./types.js";
+
+export const CATEGORY_LABELS = {
+  "Завтрак": "Утренние блюда",
+  "Обед": "Основные блюда",
+  "Ужин": "Вечерние блюда",
+  "Десерт": "Сладкие блюда",
+} satisfies CategoryLabels;
 export function filterRecipes(
   recipes: Recipe[],
   filter: RecipeFilter,
@@ -94,4 +108,23 @@ export function updateRecipe(
   return recipes.map((recipe) =>
     recipe.id === id ? { ...recipe, ...updates } : recipe,
   );
+}
+
+export function sortRecipes(
+  recipes: Recipe[],
+  key: RecipeSortKey,
+  direction: "asc" | "desc",
+): Recipe[] {
+  const multiplier = direction === "asc" ? 1 : -1;
+
+  return [...recipes].sort((a, b) => {
+    const left = a[key];
+    const right = b[key];
+
+    if (typeof left === "number" && typeof right === "number") {
+      return (left - right) * multiplier;
+    }
+
+    return String(left).localeCompare(String(right), "ru") * multiplier;
+  });
 }

@@ -5,16 +5,26 @@ import {
   deleteRecipeApi,
   fetchRecipes,
   updateRecipeApi,
+  updateRecipeOnServer,
 } from "./api.js";
 import { debounce } from "./debounce.js";
 import { retry } from "./retry.js";
-import type { Category, NewRecipe, Recipe, RecipeDraft, RecipeFilter } from "./types.js";
+import type {
+  Category,
+  NewRecipe,
+  Recipe,
+  RecipeDraft,
+  RecipeFilter,
+  RecipeSortKey,
+  RecipeUpdate,
+} from "./types.js";
 import {
   addReview,
   deleteRecipe,
   filterRecipes,
   isValidImageUrl,
   toggleReviewLike,
+  sortRecipes,
 } from "./recipes.js";
 import {
   searchInput,
@@ -40,6 +50,17 @@ import {
   updateCategoryCounts,
   renderMessage,
   retryLoadButton,
+  editRecipeForm,
+  editRecipeId,
+  editRecipeTitle,
+  editRecipeCategory,
+  editRecipeServings,
+  editRecipeTime,
+  editRecipeIngredients,
+  editRecipeInstructions,
+  editMessage,
+  sortKeySelect,
+  sortDirectionSelect,
 } from "./ui.js";
 let recipes: Recipe[] = [];
 let editingRecipeId: string | null = null;
@@ -62,12 +83,16 @@ categoryFilter.addEventListener("change", render);
 favoritesOnly.addEventListener("change", render);
 min30Only.addEventListener("change", render);
 cookingTimeSort.addEventListener("change", render);
+sortKeySelect.addEventListener("change", render);
+sortDirectionSelect.addEventListener("change", render);
 clearFiltersButton.addEventListener("click", () => {
   searchInput.value = "";
   categoryFilter.value = "Все";
   favoritesOnly.checked = false;
   min30Only.checked = false;
   cookingTimeSort.value = "none";
+  sortKeySelect.value = "title";
+  sortDirectionSelect.value = "asc";
   render();
 });
 
@@ -76,30 +101,28 @@ function resetForm(): void {
   editingRecipeId = null;
   recipeFormTitle.textContent = "Добавить рецепт";
   recipeSubmitButton.textContent = "Сохранить рецепт";
-  cancelEditButton.hidden = true;
 }
 
 function editRecipe(id: string): void {
   const recipe = recipes.find((item) => item.id === id);
   if (!recipe) return;
-  editingRecipeId = id;
-  recipeFormTitle.textContent = "Редактировать рецепт";
-  recipeTitleInput.value = recipe.title;
-  recipeCategoryInput.value = recipe.category;
-  recipeServingsInput.value = String(recipe.servings);
-  recipeTimeInput.value = String(recipe.cookingTime);
-  recipeIngredientsInput.value = recipe.ingredients.join(", ");
-  recipeInstructionsInput.value = recipe.instructions;
-  recipeImageInput.value = recipe.imageUrl ?? "";
-  recipeSubmitButton.textContent = "Сохранить изменения";
-  cancelEditButton.hidden = false;
-  formMessage.textContent = `Редактирование рецепта «${recipe.title}».`;
-  recipeTitleInput.focus();
+  editRecipeId.value = recipe.id;
+  editRecipeTitle.value = recipe.title;
+  editRecipeCategory.value = recipe.category;
+  editRecipeServings.value = String(recipe.servings);
+  editRecipeTime.value = String(recipe.cookingTime);
+  editRecipeIngredients.value = recipe.ingredients.join(", ");
+  editRecipeInstructions.value = recipe.instructions;
+  editMessage.textContent = `Редактирование рецепта «${recipe.title}».`;
+  editRecipeForm.hidden = false;
+  editRecipeForm.scrollIntoView({ behavior: "smooth", block: "center" });
+  editRecipeTitle.focus();
 }
 
 cancelEditButton.addEventListener("click", () => {
-  resetForm();
-  formMessage.textContent = "Редактирование отменено.";
+  editRecipeForm.reset();
+  editRecipeForm.hidden = true;
+  editMessage.textContent = "Редактирование отменено.";
 });
 recipeList.addEventListener("click", async (event: MouseEvent) => {
   const target = event.target;
@@ -142,6 +165,46 @@ recipeList.addEventListener("click", async (event: MouseEvent) => {
     formMessage.textContent = `Не удалось сохранить изменение: ${errorMessage(error)}`;
   }
 });
+
+editRecipeForm.addEventListener("submit", async (event: SubmitEvent) => {
+  event.preventDefault();
+  if (state.status !== "success") return;
+
+  const category = editRecipeCategory.value;
+  if (
+    category !== "Завтрак" &&
+    category !== "Обед" &&
+    category !== "Ужин" &&
+    category !== "Десерт"
+  ) return;
+
+  const id = editRecipeId.value;
+  const changes: RecipeUpdate = {
+    title: editRecipeTitle.value.trim(),
+    category,
+    servings: Number(editRecipeServings.value),
+    cookingTime: Number(editRecipeTime.value),
+    ingredients: editRecipeIngredients.value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean),
+    instructions: editRecipeInstructions.value.trim(),
+  };
+
+  try {
+    const updated = await updateRecipeOnServer(id, changes);
+    recipes = recipes.map((recipe) =>
+      recipe.id === id ? updated : recipe,
+    );
+    editRecipeForm.reset();
+    editRecipeForm.hidden = true;
+    editMessage.textContent = "Изменения сохранены.";
+    persistAndRender();
+  } catch (error) {
+    editMessage.textContent = `Не удалось сохранить изменения: ${errorMessage(error)}`;
+  }
+});
+
 recipeList.addEventListener("submit", async (event: SubmitEvent) => {
   const target = event.target;
   if (!(target instanceof HTMLFormElement) || !target.dataset.recipeId) return;
@@ -270,11 +333,18 @@ function render(): void {
       retryLoadButton.hidden = false;
       break;
     
-    case "success":
+    case "success": {
       retryLoadButton.hidden = true;
       updateCategoryCounts(recipes);
-      renderRecipes(filterRecipes(recipes, getFilter()));
+      const filtered = filterRecipes(recipes, getFilter());
+      const sorted = sortRecipes(
+        filtered,
+        sortKeySelect.value as RecipeSortKey,
+        sortDirectionSelect.value as "asc" | "desc",
+      );
+      renderRecipes(sorted);
       break;
+    }
     
     default:
       assertNever(state);

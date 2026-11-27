@@ -51,3 +51,11 @@ export function parseRecipes(data: unknown): Recipe[] {
     reviews: recipe.reviews ?? [],
   }));
 }
+
+export function parseRecipe(data: unknown): Recipe {
+  const recipes = parseRecipes([data]);
+  if (!recipes[0]) {
+    throw new Error("Сервер вернул пустой ответ");
+  }
+  return recipes[0];
+}

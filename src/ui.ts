@@ -44,6 +44,28 @@ export const recipeImageInput =
   requireElement<HTMLInputElement>("#recipe-image-url");
 export const cancelEditButton =
   requireElement<HTMLButtonElement>("#cancel-edit");
+export const editRecipeForm =
+  requireElement<HTMLFormElement>("#edit-recipe-form");
+export const editRecipeId =
+  requireElement<HTMLInputElement>("#edit-recipe-id");
+export const editRecipeTitle =
+  requireElement<HTMLInputElement>("#edit-recipe-title");
+export const editRecipeCategory =
+  requireElement<HTMLSelectElement>("#edit-recipe-category");
+export const editRecipeServings =
+  requireElement<HTMLInputElement>("#edit-recipe-servings");
+export const editRecipeTime =
+  requireElement<HTMLInputElement>("#edit-recipe-time");
+export const editRecipeIngredients =
+  requireElement<HTMLTextAreaElement>("#edit-recipe-ingredients");
+export const editRecipeInstructions =
+  requireElement<HTMLTextAreaElement>("#edit-recipe-instructions");
+export const editMessage =
+  requireElement<HTMLParagraphElement>("#edit-message");
+export const sortKeySelect =
+  requireElement<HTMLSelectElement>("#sort-key");
+export const sortDirectionSelect =
+  requireElement<HTMLSelectElement>("#sort-direction");
 export const retryLoadButton =
   requireElement<HTMLButtonElement>("#retry-load");
 
