@@ -12,7 +12,7 @@ export const searchInput = requireElement<HTMLInputElement>("#search");
 export const categoryFilter =
   requireElement<HTMLSelectElement>("#category-filter");
 export const favoritesOnly =
-  requireElement<HTMLInputElement>("#favorites-only");
+  requireElement<HTMLInputElement>("#favorites-only"); 
 export const recipeForm = requireElement<HTMLFormElement>("#recipe-form");
 export const recipeSubmitButton =
   requireElement<HTMLButtonElement>("#recipe-submit");
@@ -44,6 +44,8 @@ export const recipeImageInput =
   requireElement<HTMLInputElement>("#recipe-image-url");
 export const cancelEditButton =
   requireElement<HTMLButtonElement>("#cancel-edit");
+export const retryLoadButton =
+  requireElement<HTMLButtonElement>("#retry-load");
 
 const categoryFilterOptions = Array.from(categoryFilter.options);
 
@@ -189,5 +191,15 @@ export function renderRecipes(recipes: Recipe[]): void {
       deleteButton,
     );
     recipeList.append(card);
+  }
+  
+}
+export function renderMessage(text: string): void {
+  const recipeList = document.getElementById("recipe-list") || document.querySelector(".recipes");
+  if (recipeList) {
+    recipeList.innerHTML = "";
+    const p = document.createElement("p");
+    p.textContent = text;
+    recipeList.append(p);
   }
 }

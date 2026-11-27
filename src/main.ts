@@ -1,15 +1,20 @@
-import type { Category, Recipe, RecipeDraft, RecipeFilter } from "./types.js";
-import { initialRecipes } from "./data.js";
-import { loadRecipes, saveRecipes } from "./storage.js";
+import type { LoadState } from "./state.js";
+import { assertNever, errorMessage } from "./state.js";
+import {
+  createRecipeApi,
+  deleteRecipeApi,
+  fetchRecipes,
+  updateRecipeApi,
+} from "./api.js";
+import { debounce } from "./debounce.js";
+import { retry } from "./retry.js";
+import type { Category, NewRecipe, Recipe, RecipeDraft, RecipeFilter } from "./types.js";
 import {
   addReview,
-  createRecipe,
   deleteRecipe,
   filterRecipes,
   isValidImageUrl,
-  toggleFavorite,
   toggleReviewLike,
-  updateRecipe,
 } from "./recipes.js";
 import {
   searchInput,
@@ -33,8 +38,10 @@ import {
   cancelEditButton,
   recipeSubmitButton,
   updateCategoryCounts,
+  renderMessage,
+  retryLoadButton,
 } from "./ui.js";
-let recipes: Recipe[] = loadRecipes() ?? initialRecipes;
+let recipes: Recipe[] = [];
 let editingRecipeId: string | null = null;
 function getFilter(): RecipeFilter {
   return {
@@ -46,15 +53,11 @@ function getFilter(): RecipeFilter {
       cookingTimeSort.value as RecipeFilter["sortByCookingTime"],
   };
 }
-function render(): void {
-  updateCategoryCounts(recipes);
-  renderRecipes(filterRecipes(recipes, getFilter()));
-}
 function persistAndRender(): void {
-  saveRecipes(recipes);
   render();
 }
-searchInput.addEventListener("input", render);
+const debouncedRender = debounce(() => render(), 250);
+searchInput.addEventListener("input", debouncedRender);
 categoryFilter.addEventListener("change", render);
 favoritesOnly.addEventListener("change", render);
 min30Only.addEventListener("change", render);
@@ -98,7 +101,7 @@ cancelEditButton.addEventListener("click", () => {
   resetForm();
   formMessage.textContent = "Редактирование отменено.";
 });
-recipeList.addEventListener("click", (event: MouseEvent) => {
+recipeList.addEventListener("click", async (event: MouseEvent) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
   const button = target.closest<HTMLButtonElement>("button[data-action]");
@@ -106,28 +109,40 @@ recipeList.addEventListener("click", (event: MouseEvent) => {
   const id = button.dataset.id;
   const action = button.dataset.action;
   if (!id) return;
-  if (action === "favorite") {
-    recipes = toggleFavorite(recipes, id);
-  } else if (action === "like-review") {
-    const reviewId = button.dataset.reviewId;
-    if (!reviewId) return;
-    recipes = toggleReviewLike(recipes, id, reviewId);
-  } else if (action === "delete") {
-    if (!window.confirm("Удалить этот рецепт?")) return;
-    recipes = deleteRecipe(recipes, id);
-    if (editingRecipeId === id) {
-      resetForm();
-      formMessage.textContent = "Рецепт удален.";
+  try {
+    if (action === "favorite") {
+      const recipe = recipes.find((item) => item.id === id);
+      if (!recipe) return;
+      const updated = await updateRecipeApi(id, { favorite: !recipe.favorite });
+      recipes = recipes.map((item) => (item.id === id ? updated : item));
+    } else if (action === "like-review") {
+      const reviewId = button.dataset.reviewId;
+      if (!reviewId) return;
+      const next = toggleReviewLike(recipes, id, reviewId);
+      const recipe = next.find((item) => item.id === id);
+      if (!recipe) return;
+      await updateRecipeApi(id, { reviews: recipe.reviews });
+      recipes = next;
+    } else if (action === "delete") {
+      if (!window.confirm("Удалить этот рецепт?")) return;
+      await deleteRecipeApi(id);
+      recipes = deleteRecipe(recipes, id);
+      if (editingRecipeId === id) {
+        resetForm();
+        formMessage.textContent = "Рецепт удален.";
+      }
+    } else if (action === "edit") {
+      editRecipe(id);
+      return;
+    } else {
+      return;
     }
-  } else if (action === "edit") {
-    editRecipe(id);
-    return;
-  } else {
-    return;
+    persistAndRender();
+  } catch (error) {
+    formMessage.textContent = `Не удалось сохранить изменение: ${errorMessage(error)}`;
   }
-  persistAndRender();
 });
-recipeList.addEventListener("submit", (event: SubmitEvent) => {
+recipeList.addEventListener("submit", async (event: SubmitEvent) => {
   const target = event.target;
   if (!(target instanceof HTMLFormElement) || !target.dataset.recipeId) return;
   event.preventDefault();
@@ -145,15 +160,25 @@ recipeList.addEventListener("submit", (event: SubmitEvent) => {
     message.textContent = "Укажите имя и текст отзыва.";
     return;
   }
-  recipes = addReview(
+  const next = addReview(
     recipes,
     target.dataset.recipeId,
     author.trim(),
     text.trim(),
   );
+  const recipe = next.find((item) => item.id === target.dataset.recipeId);
+  if (!recipe) return;
+  try {
+    await updateRecipeApi(recipe.id, { reviews: recipe.reviews });
+  } catch (error) {
+    message.textContent = `Не удалось добавить отзыв: ${errorMessage(error)}`;
+    return;
+  }
+  recipes = next;
+  message.textContent = "Отзыв добавлен.";
   persistAndRender();
 });
-recipeForm.addEventListener("submit", (event: SubmitEvent) => {
+recipeForm.addEventListener("submit", async (event: SubmitEvent) => {
   event.preventDefault();
   const title = recipeTitleInput.value.trim();
   const servings = Number(recipeServingsInput.value);
@@ -190,14 +215,86 @@ recipeForm.addEventListener("submit", (event: SubmitEvent) => {
     instructions,
     imageUrl,
   };
-  if (editingRecipeId) {
-    recipes = updateRecipe(recipes, editingRecipeId, draft);
-    formMessage.textContent = "Изменения сохранены.";
-  } else {
-    recipes = [createRecipe(draft), ...recipes];
-    formMessage.textContent = "Рецепт добавлен.";
+  try {
+    if (editingRecipeId) {
+      const updated = await updateRecipeApi(editingRecipeId, draft);
+      recipes = recipes.map((recipe) =>
+        recipe.id === editingRecipeId ? updated : recipe,
+      );
+      formMessage.textContent = "Изменения сохранены.";
+    } else {
+      const newRecipe: NewRecipe = {
+        ...draft,
+        favorite: false,
+        reviews: [],
+      };
+      const created = await createRecipeApi(newRecipe);
+      recipes = [created, ...recipes];
+      formMessage.textContent = "Рецепт добавлен.";
+    }
+  } catch (error) {
+    formMessage.textContent =
+      `Не удалось сохранить рецепт: ${errorMessage(error)}`;
+    return;
   }
   resetForm();
   persistAndRender();
 });
-render();
+
+let state: LoadState = { status: "loading" };
+const minimumLoadingDurationMs = 3000;
+
+async function waitForMinimumLoadingDuration(startedAt: number): Promise<void> {
+  const remaining = minimumLoadingDurationMs - (Date.now() - startedAt);
+  if (remaining > 0) {
+    await new Promise<void>((resolve) => setTimeout(resolve, remaining));
+  }
+}
+
+function setState(next: LoadState): void {
+  state = next;
+  if (next.status === "success") {
+    recipes = next.recipes;
+  }
+  render();
+}
+
+function render(): void {
+  switch (state.status) {
+    case "loading":
+      renderMessage("Загрузка рецептов...");
+      break;
+    
+    case "error":
+      renderMessage(`Не удалось загрузить рецепты: ${state.message}`);
+      retryLoadButton.hidden = false;
+      break;
+    
+    case "success":
+      retryLoadButton.hidden = true;
+      updateCategoryCounts(recipes);
+      renderRecipes(filterRecipes(recipes, getFilter()));
+      break;
+    
+    default:
+      assertNever(state);
+  }
+}
+
+async function init(): Promise<void> {
+  const loadingStartedAt = Date.now();
+  setState({ status: "loading" });
+  try {
+    const recipes = await retry(() => fetchRecipes(), 3, 500);
+    await waitForMinimumLoadingDuration(loadingStartedAt);
+    setState({ status: "success", recipes });
+  } catch (error) {
+    setState({ status: "error", message: errorMessage(error) });
+  }
+}
+
+retryLoadButton.addEventListener("click", () => {
+  void init();
+});
+
+void init();

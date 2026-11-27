@@ -1,0 +1,47 @@
+{
+  "recipes": [
+    {
+      "id": "1",
+      "title": "Сырники",
+      "category": "Завтрак",
+      "servings": 4,
+      "cookingTime": 30,
+      "ingredients": [
+        "Творог 500 г",
+        "Яйцо 1 шт",
+        "Мука 3 ст. л."
+      ],
+      "instructions": "Смешать, сформировать, обжарить.",
+      "favorite": false
+    },
+    {
+      "id": "recipe-2",
+      "title": "Овощной суп",
+      "category": "Обед",
+      "servings": 4,
+      "cookingTime": 35,
+      "ingredients": [
+        "картофель",
+        "морковь",
+        "лук",
+        "вода"
+      ],
+      "instructions": "Нарезать овощи и варить до готовности.",
+      "favorite": false
+    },
+    {
+      "id": "recipe-3",
+      "title": "Яблочный десерт",
+      "category": "Десерт",
+      "servings": 3,
+      "cookingTime": 25,
+      "ingredients": [
+        "яблоки",
+        "корица",
+        "мёд"
+      ],
+      "instructions": "Нарезать яблоки, добавить корицу и запечь.",
+      "favorite": false
+    }
+  ]
+}
